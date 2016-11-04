@@ -130,5 +130,5 @@ function dropRecreateTables(dbName, cb){
 // 		drop table if exists && create table script >> create_table.sql
 
 /*
-node index.js --action="backup" --engine="infinidb" --port="3307" --host="52.220.65.105" --db="axiomdemo" --user="usr" --pass="usr" --tmpdir="/tmp/database_backup" 
+node index.js --action="backup" --engine="infinidb" --port="3307" --host="localhost" --db="axiomdemo" --user="usr" --pass="usr" --tmpdir="/tmp/database_backup" 
 */
