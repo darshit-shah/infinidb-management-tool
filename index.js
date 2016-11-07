@@ -46,7 +46,7 @@ if (argv.action.toString() == "restore") {
   // fs.mkdirSync(backupDirectory);
 
   createStreamTXT.write("tableName,fileName\r\n");
-  getTables(function(resultTables) {
+  getTables(argv.db, function(resultTables) {
     if (resultTables.status === false) {
       console.log(resultTables);
       return;
@@ -88,7 +88,7 @@ if (argv.action.toString() == "restore") {
   process.exit(0);
 }
 
-function getTables(cb) {
+function getTables(dbName, cb) {
   //var query = "show tables;";
   var query = "select TABLE_NAME from TABLES where TABLE_SCHEMA='"+dbName+"' and TABLE_TYPE='BASE TABLE';";
   var requestData = {};
