@@ -31,25 +31,23 @@ if (argv.action.toString() == "restore") {
   dropRecreateTables(defaultDBConfig.database, function() {
     fs.readFile(backupDirectory + "/TableMapping.txt", function(err, data) {
       data = data.toString();
-      //console.log("data", data);
       var lines = data.split("\r\n");
       lines = lines.map(function(l) {
         return l.split(",");
       });
-      //console.log("lines", lines);
-
+      
       function processTables(index) {
         if (index >= lines.length) {
           process.exit(0);
           return;
         }
-        //console.log("Processing lines ", index + 1, lines[index]);
+        debug("Processing lines ", index + 1, lines[index]);
         if(lines[index].length == 0){
           processTables(index+1);
         }
         loadFile(lines[index][0], function(queryResult) {
           if (queryResult.status === false) {
-            console.log(queryResult);
+            debug(queryResult);
             return;
           }
           processTables(index + 1);
@@ -63,7 +61,7 @@ if (argv.action.toString() == "restore") {
   var createStreamTXT = fs.createWriteStream(backupDirectory + "/TableMapping.txt");
   var varShowCreateTable = "";
   if (fs.existsSync(backupDirectory)) {
-    console.log('Directory already exists! Please delete it manually.');
+    debug('Directory already exists! Please delete it manually.');
   }
   /*
   //create directory
@@ -73,7 +71,7 @@ if (argv.action.toString() == "restore") {
   createStreamTXT.write("tableName,fileName\r\n");
   getTables(argv.db, function(resultTables) {
     if (resultTables.status === false) {
-      console.log(resultTables);
+      debug(resultTables);
       return;
     }
 
@@ -90,13 +88,13 @@ if (argv.action.toString() == "restore") {
       debug((index + 1) + " out of " + resultTables.content.length + ". Processing Table " + currTableName);
       getShowCreateTable(currTableName, function(tableData) {
         if (tableData.status === false) {
-          console.log(tableData);
+          debug(tableData);
           return;
         }
         createStreamSQL.write("drop table if exists `" + currTableName + "`;\r\n" + tableData.content[0]['Create Table'] + ";\r\n\r\n");
         getOutFile(currTableName, function(queryResult) {
           if (queryResult.status === false) {
-            console.log(queryResult);
+            debug(queryResult);
             return;
           }
           setTimeout(function() {
@@ -108,7 +106,7 @@ if (argv.action.toString() == "restore") {
     processTables(0);
   });
 } else {
-  console.log("Unknown action " + argv.action);
+  debug("Unknown action " + argv.action);
   process.exit(0);
 }
 
@@ -157,7 +155,7 @@ function dropRecreateTables(dbName, cb) {
       "dbConfig": defaultDBConfig
     };
     queryExecutor.executeRawQuery(requestData, function(result) {
-      //console.log("dropRecreateTables", result);
+      debug("dropRecreateTables", result);
       cb();
     });
   });
