@@ -9,7 +9,7 @@ debug(argv);
 if (argv.action && argv.engine && argv.port && argv.host && argv.db && argv.user && argv.pass && argv.tmpdir) {
   console.log('Good to go!');
 } else {
-  console.log('You shall not pass!',argv.action, argv.engine, argv.port, argv.host, argv.db, argv.user, argv.pass, argv.tmpdir);
+  console.log('You shall not pass!', argv.action, argv.engine, argv.port, argv.host, argv.db, argv.user, argv.pass, argv.tmpdir);
   process.exit(0);
 }
 
@@ -22,7 +22,8 @@ var defaultDBConfig = {
   port: argv.port,
   user: argv.user,
   password: argv.pass,
-  connectionLimit: 0
+  connectionLimit: 0,
+  acquireTimeout: 5 * 60 * 1000
 };
 
 
@@ -30,11 +31,10 @@ var backupDirectory = argv.tmpdir;
 // backupDirectory = "F:/filemanagement/tempo";
 
 if (argv.action.toString() == "restore") {
-	dropRecreateTables(defaultDBConfig.database, function(){
-		process.exit(0);
-	});
-}
-else if(argv.action.toString() == "backup") {
+  dropRecreateTables(defaultDBConfig.database, function() {
+    process.exit(0);
+  });
+} else if (argv.action.toString() == "backup") {
   var createStreamSQL = fs.createWriteStream(backupDirectory + "/DBBackupScript.sql", { 'flags': 'w' });
   var createStreamTXT = fs.createWriteStream(backupDirectory + "/TableMapping.txt");
   var varShowCreateTable = "";
@@ -61,33 +61,36 @@ else if(argv.action.toString() == "backup") {
         process.exit(0);
         return;
       }
-      var currTableName = resultTables.content[index]["Tables_in_" + defaultDBConfig.database];
+      // var currTableName = resultTables.content[index]["Tables_in_" + defaultDBConfig.database];
+      var currTableName = resultTables.content[index]["TABLE_NAME"];
       debug((index + 1) + " out of " + resultTables.content.length + ". Processing Table " + currTableName);
       getShowCreateTable(currTableName, function(tableData) {
         if (tableData.status === false) {
           console.log(tableData);
           return;
         }
-        createStreamSQL.write("drop table if exists `"+currTableName+"`;\r\n"+ tableData.content[0]['Create Table'] + ";\r\n\r\n");
+        createStreamSQL.write("drop table if exists `" + currTableName + "`;\r\n" + tableData.content[0]['Create Table'] + ";\r\n\r\n");
         getOutFile(currTableName, function(queryResult) {
           if (queryResult.status === false) {
             console.log(queryResult);
             return;
           }
-          processTables(index + 1);
+          setTimeout(function() {
+            processTables(index + 1);
+          }, 100);
         });
       });
     }
     processTables(0);
   });
-}
-else {
-	console.log("Unknown action "+argv.action);
-	process.exit(0);
+} else {
+  console.log("Unknown action " + argv.action);
+  process.exit(0);
 }
 
 function getTables(cb) {
-  var query = "show tables;";
+  //var query = "show tables;";
+  var query = "select TABLE_NAME from TABLES where TABLE_SCHEMA='"+dbName+"' and TABLE_TYPE='BASE TABLE';";
   var requestData = {};
   requestData.query = query;
   debug(requestData.query);
@@ -114,20 +117,22 @@ function getOutFile(tableName, cb) {
   queryExecutor.executeRawQuery(requestData, cb);
 }
 
-function dropRecreateTables(dbName, cb){
-	fs.readFile(backupDirectory+ "/DBBackupScript.sql", function(err, data){
-		var requestData = {
-	    "query": "use "+dbName+";" + data,
-	    "dbConfig": defaultDBConfig
-	  };
-	  queryExecutor.executeRawQuery(requestData, cb);
-	});
+function dropRecreateTables(dbName, cb) {
+  fs.readFile(backupDirectory + "/DBBackupScript.sql", function(err, data) {
+    var requestData = {
+      "query": "use " + dbName + ";" + data,
+      "dbConfig": defaultDBConfig
+    };
+    queryExecutor.executeRawQuery(requestData, function(result){
+      debug(result);
+    });
+  });
 }
 
 // tablename | filename
 // loop
-// 	show create table
-// 		drop table if exists && create table script >> create_table.sql
+//  show create table
+//    drop table if exists && create table script >> create_table.sql
 
 /*
 node index.js --action="backup" --engine="infinidb" --port="3307" --host="localhost" --db="axiomdemo" --user="usr" --pass="usr" --tmpdir="/tmp/database_backup" 
