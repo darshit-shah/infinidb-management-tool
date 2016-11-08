@@ -42,7 +42,7 @@ if (argv.action.toString() == "restore") {
           return;
         }
         debug("Processing lines ", index + 1, lines[index]);
-        if(lines[index].length == 0){
+        if(lines[index][0].length == 0){
           processTables(index+1);
         }
         loadFile(lines[index][0], function(queryResult) {
