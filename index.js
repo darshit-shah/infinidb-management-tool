@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 var debug = require('debug')('infinidb-management-tool:infinidb-management-tool');
 var fs = require('fs');
 var queryExecutor = require('node-database-executor');
@@ -28,11 +26,37 @@ var defaultDBConfig = {
 
 
 var backupDirectory = argv.tmpdir;
-// backupDirectory = "F:/filemanagement/tempo";
 
 if (argv.action.toString() == "restore") {
   dropRecreateTables(defaultDBConfig.database, function() {
-    process.exit(0);
+    fs.readFile(backupDirectory + "/TableMapping.txt", function(err, data) {
+      data = data.toString();
+      console.log("data", data);
+      var lines = data.split("\r\n");
+      lines = lines.map(function(l) {
+        return l.split(",");
+      });
+      console.log("lines", lines);
+
+      function processTables(index) {
+        if (index >= lines.length) {
+          process.exit(0);
+          return;
+        }
+        console.log("Processing lines ", index + 1, lines[index]);
+        if(lines[index][0].length == 0){
+          processTables(index+1);
+        }
+        loadFile(lines[index][0], function(queryResult) {
+          if (queryResult.status === false) {
+            console.log(queryResult);
+            return;
+          }
+          processTables(index + 1);
+        });
+      }
+      processTables(1);
+    });
   });
 } else if (argv.action.toString() == "backup") {
   var createStreamSQL = fs.createWriteStream(backupDirectory + "/DBBackupScript.sql", { 'flags': 'w' });
@@ -40,10 +64,11 @@ if (argv.action.toString() == "restore") {
   var varShowCreateTable = "";
   if (fs.existsSync(backupDirectory)) {
     console.log('Directory already exists! Please delete it manually.');
-    // process.exit(0);
   }
-  // create directory
-  // fs.mkdirSync(backupDirectory);
+  /*
+ *   //create directory
+ *     fs.mkdirSync(backupDirectory);
+ *       */
 
   createStreamTXT.write("tableName,fileName\r\n");
   getTables(argv.db, function(resultTables) {
@@ -61,7 +86,6 @@ if (argv.action.toString() == "restore") {
         process.exit(0);
         return;
       }
-      // var currTableName = resultTables.content[index]["Tables_in_" + defaultDBConfig.database];
       var currTableName = resultTables.content[index]["TABLE_NAME"];
       debug((index + 1) + " out of " + resultTables.content.length + ". Processing Table " + currTableName);
       getShowCreateTable(currTableName, function(tableData) {
@@ -89,8 +113,7 @@ if (argv.action.toString() == "restore") {
 }
 
 function getTables(dbName, cb) {
-  //var query = "show tables;";
-  var query = "select TABLE_NAME from TABLES where TABLE_SCHEMA='"+dbName+"' and TABLE_TYPE='BASE TABLE';";
+  var query = "select TABLE_NAME from information_schema.TABLES where TABLE_SCHEMA='" + dbName + "' and TABLE_TYPE='BASE TABLE';";
   var requestData = {};
   requestData.query = query;
   debug(requestData.query);
@@ -117,23 +140,32 @@ function getOutFile(tableName, cb) {
   queryExecutor.executeRawQuery(requestData, cb);
 }
 
+function loadFile(tableName, cb) {
+  var query = "LOAD DATA INFILE '" + backupDirectory + "/" + tableName + ".csv' INTO TABLE `" + tableName + "`  fields terminated by ',' enclosed by '\"' lines terminated by '\r\n';";
+  debug(query);
+  var requestData = {
+    "query": query,
+    "dbConfig": defaultDBConfig
+  };
+  queryExecutor.executeRawQuery(requestData, cb);
+}
+
 function dropRecreateTables(dbName, cb) {
   fs.readFile(backupDirectory + "/DBBackupScript.sql", function(err, data) {
     var requestData = {
       "query": "use " + dbName + ";" + data,
       "dbConfig": defaultDBConfig
     };
-    queryExecutor.executeRawQuery(requestData, function(result){
-      debug(result);
+    queryExecutor.executeRawQuery(requestData, function(result) {
+      console.log("dropRecreateTables", result);
+      cb();
     });
   });
 }
 
-// tablename | filename
-// loop
-//  show create table
-//    drop table if exists && create table script >> create_table.sql
+
 
 /*
-node index.js --action="backup" --engine="infinidb" --port="3307" --host="localhost" --db="axiomdemo" --user="usr" --pass="usr" --tmpdir="/tmp/database_backup" 
-*/
+ * node index.js --action="backup" --engine="infinidb" --port="3307" --host="localhost" --db="axiomdemo" --user="usr" --pass="usr" --tmpdir="/tmp/database_backup" 
+ * */
+
