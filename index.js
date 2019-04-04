@@ -28,11 +28,11 @@ var defaultDBConfig = {
 var backupDirectory = argv.tmpdir;
 
 if (argv.action.toString() == "restore") {
-  dropRecreateTables(defaultDBConfig.database, function() {
-    fs.readFile(backupDirectory + "/TableMapping.txt", function(err, data) {
+  dropRecreateTables(defaultDBConfig.database, function () {
+    fs.readFile(backupDirectory + "/TableMapping.txt", function (err, data) {
       data = data.toString();
       var lines = data.split("\r\n");
-      lines = lines.map(function(l) {
+      lines = lines.map(function (l) {
         return l.split(",");
       });
       function processTables(index) {
@@ -41,10 +41,10 @@ if (argv.action.toString() == "restore") {
           return;
         }
         debug("Processing lines ", index + 1, lines[index]);
-        if(lines[index][0].length == 0){
-          processTables(index+1);
+        if (lines[index][0].length == 0) {
+          processTables(index + 1);
         }
-        loadFile(lines[index][0], function(queryResult) {
+        loadFile(lines[index][0], function (queryResult) {
           if (queryResult.status === false) {
             debug(queryResult);
             return;
@@ -56,8 +56,12 @@ if (argv.action.toString() == "restore") {
     });
   });
 } else if (argv.action.toString() == "backup") {
+
   var createStreamSQL = fs.createWriteStream(backupDirectory + "/DBBackupScript.sql", { 'flags': 'w' });
   var createStreamTXT = fs.createWriteStream(backupDirectory + "/TableMapping.txt");
+  var createStreamSkippedInCreate = fs.createWriteStream(backupDirectory + "/SkippedTablesInCreate.txt");
+  var createStreamSkippedInOut = fs.createWriteStream(backupDirectory + "/SkippedTablesInOutput.txt");
+
   var varShowCreateTable = "";
   if (fs.existsSync(backupDirectory)) {
     debug('Directory already exists! Please delete it manually.');
@@ -68,11 +72,15 @@ if (argv.action.toString() == "restore") {
   */
 
   createStreamTXT.write("tableName,fileName\r\n");
-  getTables(argv.db, function(resultTables) {
+  createStreamSkippedInCreate.write("tableName\r\n");
+  createStreamSkippedInOut.write("tableName\r\n");
+
+  getTables(argv.db, function (resultTables) {
     if (resultTables.status === false) {
       debug(resultTables);
       return;
     }
+    console.log("Number of tables: ", resultTables.content.length);
 
     function processTables(index) {
       if (index >= resultTables.content.length) {
@@ -83,23 +91,37 @@ if (argv.action.toString() == "restore") {
         process.exit(0);
         return;
       }
+
+
       var currTableName = resultTables.content[index]["TABLE_NAME"];
       debug((index + 1) + " out of " + resultTables.content.length + ". Processing Table " + currTableName);
-      getShowCreateTable(currTableName, function(tableData) {
+      getShowCreateTable(currTableName, function (tableData) {
+
         if (tableData.status === false) {
           debug(tableData);
-          return;
-        }
-        createStreamSQL.write("drop table if exists `" + currTableName + "`;\r\n" + tableData.content[0]['Create Table'] + ";\r\n\r\n");
-        getOutFile(currTableName, function(queryResult) {
-          if (queryResult.status === false) {
-            debug(queryResult);
-            return;
-          }
-          setTimeout(function() {
+          console.log("error in getting createTable script");
+          createStreamSkippedInCreate.write(currTableName + "\r\n");
+          
+          setTimeout(function () {
             processTables(index + 1);
           }, 100);
-        });
+          // return;
+        }
+        else {
+          createStreamSQL.write("drop table if exists `" + currTableName + "`;\r\n" + tableData.content[0]['Create Table'] + ";\r\n\r\n");
+          getOutFile(currTableName, function (queryResult) {
+            if (queryResult.status === false) {
+              debug(queryResult);
+              console.log("error in creating output csv file");
+              createStreamSkippedInOut.write(currTableName + "\r\n");
+              // return;
+            }
+
+            setTimeout(function () {
+              processTables(index + 1);
+            }, 100);
+          });
+        }
       });
     }
     processTables(0);
@@ -115,18 +137,26 @@ function getTables(dbName, cb) {
   requestData.query = query;
   debug(requestData.query);
   requestData.dbConfig = defaultDBConfig;
-  queryExecutor.executeRawQuery(requestData, cb);
+  queryExecutor.executeRawQuery(requestData, function (queryResponse) {
+    // console.log("query Result",queryResponse);
+    cb(queryResponse);
+  });
 }
 
 function getShowCreateTable(tableName, cb) {
+  console.log("step1:: getting create Table schema for "+ tableName);
   var query = "show create table `" + tableName + '`;';
   var requestData = {};
   requestData.query = query;
   requestData.dbConfig = defaultDBConfig;
-  queryExecutor.executeRawQuery(requestData, cb);
+  queryExecutor.executeRawQuery(requestData, function (queryResponse) {
+    // console.log("queryResponse", queryResponse);
+    cb(queryResponse);
+  });
 }
 
 function getOutFile(tableName, cb) {
+  console.log("step2:: creating Output csv File for "+tableName + "\n");
   createStreamTXT.write(tableName + "," + tableName + "\r\n");
   var query = "select * from `" + tableName + "` into OUTFILE '" + backupDirectory + "/" + tableName + ".csv'" + " fields terminated by ',' enclosed by '\"' lines terminated by '\r\n';";
   debug(query);
@@ -134,7 +164,10 @@ function getOutFile(tableName, cb) {
     "query": query,
     "dbConfig": defaultDBConfig
   };
-  queryExecutor.executeRawQuery(requestData, cb);
+  queryExecutor.executeRawQuery(requestData, function (queryResponse) {
+    // console.log("getOutFileQueryRes",queryResponse);
+    cb(queryResponse);
+  });
 }
 
 function loadFile(tableName, cb) {
@@ -148,12 +181,12 @@ function loadFile(tableName, cb) {
 }
 
 function dropRecreateTables(dbName, cb) {
-  fs.readFile(backupDirectory + "/DBBackupScript.sql", function(err, data) {
+  fs.readFile(backupDirectory + "/DBBackupScript.sql", function (err, data) {
     var requestData = {
       "query": "use " + dbName + ";" + data,
       "dbConfig": defaultDBConfig
     };
-    queryExecutor.executeRawQuery(requestData, function(result) {
+    queryExecutor.executeRawQuery(requestData, function (result) {
       debug("dropRecreateTables", result);
       cb();
     });
@@ -163,6 +196,6 @@ function dropRecreateTables(dbName, cb) {
 
 
 /*
- * node index.js --action="backup" --engine="infinidb" --port="3307" --host="localhost" --db="axiomdemo" --user="usr" --pass="usr" --tmpdir="/tmp/database_backup" 
+ * node index.js --action="backup" --engine="infinidb" --port="3307" --host="localhost" --db="axiomdemo" --user="usr" --pass="usr" --tmpdir="/tmp/tmpdatabase_backup"
  * */
 
