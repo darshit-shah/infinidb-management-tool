@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/byteprophecy/infinidb-management-tool#readme",
   "dependencies": {
+    "debug": "^4.1.1",
     "node-database-executor": "*",
     "yargs": "5.0.0"
   }
