@@ -17,11 +17,8 @@
   },
   "homepage": "https://github.com/byteprophecy/infinidb-management-tool#readme",
   "dependencies": {
-    "axiom-rule-engine": "^1.0.3",
-    "d3": "^5.9.2",
-    "easy-zip2": "^2.0.0",
+    "debug": "^4.1.1",
     "node-database-executor": "*",
-    "xlsx": "^0.14.2",
     "yargs": "5.0.0"
   }
 }
